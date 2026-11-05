@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세포 생존기: 덱빌딩 로그라이크 (완전판)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; }
+        body { background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 10px; overflow-x: hidden; }
+        
+        /* VFX Overlays */
+        #damage-flash { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(239, 68, 68, 0.45); pointer-events: none; z-index: 999; display: none; }
+        .flash-anim { animation: flashShake 0.4s ease-out; }
+        @keyframes flashShake {
+            0% { opacity: 1; transform: translate(0, 0); }
+            25% { transform: translate(-10px, 6px); }
+            50% { transform: translate(10px, -6px); }
+            75% { transform: translate(-5px, 3px); }
+            100% { opacity: 0; transform: translate(0, 0); }
+        }
+
+        #acid-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: radial-gradient(circle, rgba(168,85,247,0.4) 0%, rgba(34,197,94,0.6) 100%);
+            pointer-events: none; z-index: 998; display: none; mix-blend-mode: color-dodge;
+        }
+        .acid-anim { animation: acidMelt 0.8s ease-in-out forwards; }
+        @keyframes acidMelt {
+            0% { opacity: 0; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.05); }
+            100% { opacity: 0; transform: scale(1); }
+        }
+
+        #drain-beam {
+            position: absolute; top: 50%; left: 30%; width: 40%; height: 8px;
+            background: linear-gradient(90deg, #eab308 0%, #ef4444 100%);
+            box-shadow: 0 0 15px #eab308; pointer-events: none; z-index: 90;
+            display: none; border-radius: 4px;
+        }
+        .beam-anim { animation: beamSyphon 0.7s ease-in-out forwards; }
+        @keyframes beamSyphon {
+            0% { opacity: 0; width: 0%; left: 30%; }
+            50% { opacity: 1; width: 40%; left: 30%; }
+            100% { opacity: 0; width: 0%; left: 70%; }
+        }
+
+        .card-burn {
+            animation: cardBurnAnim 0.6s ease-out forwards !important;
+            border-color: #ef4444 !important;
+        }
+        @keyframes cardBurnAnim {
+            0% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+            50% { transform: scale(1.15) rotate(5deg); filter: brightness(2) drop-shadow(0 0 15px #ef4444); background: #7f1d1d; }
+            100% { transform: scale(0) rotate(-20deg); opacity: 0; }
+        }
+
+        #app { width: 100%; max-width: 860px; background: #1e293b; border: 2px solid #334155; border-radius: 14px; padding: 16px; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h1 { text-align: center; color: #38bdf8; font-size: 22px; font-weight: 800; margin-bottom: 2px; }
+        .sub-title { text-align: center; color: #94a3b8; font-size: 11px; margin-bottom: 12px; }
+
+        .btn { background: #22c55e; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; transition: 0.15s; }
+        .btn:hover { background: #16a34a; }
+        .btn:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+        .btn-sec { background: #0f172a; border: 1px solid #334155; color: #cbd5e1; }
+        .btn-sec:hover { background: #334155; color: #fff; }
+
+        /* Setup Screen */
+        .setup-screen { display: flex; flex-direction: column; gap: 10px; }
+        .info-panel { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; font-size: 11.5px; color: #cbd5e1; line-height: 1.4; }
+        .info-panel b { color: #38bdf8; }
+        
+        .preset-btns { display: flex; gap: 8px; justify-content: center; }
+        .deck-select-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: 8px; max-height: 280px; overflow-y: auto; padding: 8px; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+        
+        .card-item { background: #1e293b; border: 2px solid #334155; border-radius: 8px; padding: 8px; text-align: center; cursor: pointer; transition: all 0.15s; position: relative; }
+        .card-item:hover { transform: translateY(-2px); }
+        .card-item.selected { border-color: #38bdf8 !important; background: rgba(56, 189, 248, 0.25) !important; box-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+        .card-item.selected::after { content: '✓'; position: absolute; top: 4px; left: 4px; background: #38bdf8; color: #000; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+        
+        .card-secretion { border-color: #a855f7 !important; box-shadow: 0 0 6px rgba(168, 85, 247, 0.2); }
+        .card-energy { border-color: #22c55e !important; box-shadow: 0 0 6px rgba(34, 197, 94, 0.2); }
+        .card-homeo { border-color: #f97316 !important; box-shadow: 0 0 6px rgba(249, 115, 22, 0.2); }
+
+        .card-item .cost { position: absolute; top: 4px; right: 4px; background: #eab308; color: #000; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+        .card-title { font-weight: bold; font-size: 12px; margin-bottom: 2px; color: #f8fafc; }
+        .card-tag { display: inline-block; font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #334155; color: #94a3b8; margin-bottom: 2px; }
+        .card-desc { font-size: 10px; color: #cbd5e1; line-height: 1.25; text-align: left; }
+
+        /* Game Screen */
+        .game-screen { display: none; flex-direction: column; gap: 10px; }
+        .header-bar { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; }
+        .status-group { display: flex; gap: 12px; font-weight: bold; font-size: 13px; }
+
+        .timer-bg { width: 100%; background: #0f172a; border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid #334155; }
+        .timer-fill { height: 100%; width: 100%; background: #38bdf8; transition: width 1s linear, background 0.3s; }
+        .timer-fill.urgent { background: #ef4444; }
+
+        .enemy-area { background: #1e293b; border: 2px solid #ef4444; border-radius: 8px; padding: 12px; text-align: center; position: relative; overflow: hidden; }
+        .enemy-area.hit { animation: enemyShake 0.35s ease-in-out; background: #3b1111; }
+        @keyframes enemyShake { 0% { transform: translate(0,0); } 25% { transform: translate(-8px, 4px); } 50% { transform: translate(8px, -4px); } 75% { transform: translate(-4px, 2px); } 100% { transform: translate(0,0); } }
+
+        .enemy-icon { font-size: 40px; margin-bottom: 2px; filter: drop-shadow(0 0 8px rgba(239,68,68,0.5)); }
+        
+        .dmg-popup { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); font-size: 32px; font-weight: 900; color: #f87171; text-shadow: 0 0 10px #ef4444; pointer-events: none; animation: floatDmg 0.75s forwards ease-out; }
+        .dmg-popup.speed-bonus { color: #facc15 !important; text-shadow: 0 0 15px #eab308 !important; font-size: 40px !important; }
+        @keyframes floatDmg { 0% { opacity: 1; transform: translate(-50%, 0) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -40px) scale(0.9); } }
+
+        #speed-bonus-indicator {
+            position: absolute; top: 8px; right: 12px; font-size: 11px; font-weight: bold; color: #eab308;
+            background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.4); padding: 2px 8px; border-radius: 12px;
+            display: none; animation: pulseGlow 1s infinite alternate;
+        }
+        @keyframes pulseGlow { 0% { opacity: 0.7; } 100% { opacity: 1; transform: scale(1.03); } }
+
+        .hp-bar-bg { background: #334155; height: 14px; border-radius: 7px; overflow: hidden; margin-top: 6px; position: relative; }
+        .hp-bar-fill { background: #ef4444; height: 100%; width: 100%; transition: width 0.3s; }
+
+        #combo-banner { background: #22c55e; color: #fff; padding: 6px; border-radius: 6px; text-align: center; font-weight: bold; font-size: 12px; display: none; }
+
+        .hand-area { display: flex; gap: 8px; justify-content: center; min-height: 145px; flex-wrap: wrap; }
+        .game-card { width: 115px; height: 145px; background: #1e293b; border: 2px solid #334155; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.15s; position: relative; }
+        .game-card:hover { transform: translateY(-6px); }
+        .game-card .cost-badge { position: absolute; top: 4px; right: 4px; background: #eab308; color: #000; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+
+        .log-area { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 10px; height: 65px; overflow-y: auto; font-size: 11px; color: #94a3b8; line-height: 1.3; }
+
+        /* Modals */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.9); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: #1e293b; border: 2px solid #334155; border-radius: 12px; width: 90%; max-width: 520px; padding: 16px; max-height: 90vh; overflow-y: auto; }
+        .combo-row { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 8px; margin-bottom: 5px; font-size: 11.5px; }
+
+        .reward-card { background: #0f172a; border: 2px solid #38bdf8; border-radius: 8px; padding: 10px; margin-bottom: 8px; text-align: center; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .reward-card:hover { background: rgba(56, 189, 248, 0.2); transform: scale(1.02); }
+
+        .rank-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+        .rank-table th, .rank-table td { border: 1px solid #334155; padding: 6px; text-align: center; }
+        .rank-table th { background: #0f172a; color: #38bdf8; }
+
+        /* Feedback Modal */
+        #feedback-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 101; }
+        .feedback-content { background: #1e293b; border: 2px solid #eab308; border-radius: 12px; width: 90%; max-width: 480px; padding: 18px; color: #f8fafc; }
+
+        /* Quiz Quiz Option Styling */
+        .quiz-option-btn { width: 100%; text-align: left; background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 8px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-bottom: 6px; transition: 0.15s; }
+        .quiz-option-btn:hover { background: #334155; border-color: #38bdf8; }
+    </style>
+</head>
+<body>
+
+<div id="damage-flash"></div>
+<div id="acid-overlay"></div>
+
+<div id="app">
+    <div id="drain-beam"></div>
+    <h1>🧬 세포 생존기: 덱빌딩 로그라이크</h1>
+    <div class="sub-title">2022 개정 생명과학Ⅰ • 세포소기관 세부 구조 및 물질대사 (수행평가 표준 반영)</div>
+
+    <!-- 1. 사전 덱 구성 및 안내 화면 -->
+    <div id="setup-screen" class="setup-screen">
+        <div class="info-panel">
+            <p><b>🎯 학습 목표:</b> 세포 소기관의 구조와 기능을 이해하고, 여러 소기관이 협력하여 세포의 생명 활동을 수행하는 유기적 과정을 체득한다.</p>
+            <p><b>💡 기획 의도:</b> 덱빌딩 로그라이크의 카드 조합 시스템을 활용하여 개별 소기관의 기능뿐만 아니라 소기관 사이의 유기적인 협력 관계(단백질 분비, 에너지 전환 등)를 직접 경험하며 학습하도록 설계함.</p>
+            <p><b>📜 게임 규칙:</b> 카드 10장을 구성하여 ATP를 소비해 카드를 사용한다. 특정 소기관 카드를 연속 조합하면 과학적 원리에 기반한 콤보가 발동하며, 3단계 스테이지 보스를 모두 물리치면 승리한다.</p>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 4px;">
+            <span style="font-size:12px; color:#cbd5e1;">전투에 사용할 <b>카드 10장</b>을 선택하세요.</span>
+            <button class="btn btn-sec" style="padding:3px 8px; font-size:11px;" onclick="openComboCodex()">📖 콤보 족보 보기</button>
+        </div>
+        <div class="preset-btns">
+            <button class="btn" onclick="applyPreset('secretion')">🟣 단백질 분비 전문 덱</button>
+            <button class="btn" onclick="applyPreset('energy')">🟢 에너지 & 수송 덱</button>
+            <button class="btn btn-sec" onclick="applyPreset('reset')">초기화</button>
+        </div>
+        <div id="deck-select-grid" class="deck-select-grid"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="select-count" style="font-weight: bold; color: #38bdf8; font-size: 12px;">선택된 카드: 0 / 10</span>
+            <button id="start-btn" class="btn" onclick="startGame()" disabled>전투 시작 ➔</button>
+        </div>
+    </div>
+
+    <!-- 2. 인게임 전투 화면 -->
+    <div id="game-screen" class="game-screen">
+        <div class="header-bar">
+            <div class="status-group">
+                <span style="color:#38bdf8;">❤️ HP: <span id="player-hp">50</span>/<span id="player-max-hp">50</span></span>
+                <span style="color:#eab308;">⚡ ATP: <span id="player-atp">3</span>/<span id="player-max-atp">3</span></span>
+                <span style="color:#22c55e;">🛡️ 방어: <span id="player-shield">0</span></span>
+            </div>
+            <div>
+                <span id="timer-display" style="font-size: 11px; color: #94a3b8; margin-right: 6px;">⏱️ <span id="total-time">0</span>s</span>
+                <span id="stage-badge" style="font-size: 11px; font-weight: bold; color: #f97316; margin-right: 6px;">Stage 1/3</span>
+                <button class="btn btn-sec" style="padding:3px 6px; font-size:11px;" onclick="openComboCodex()">📖 족보</button>
+            </div>
+        </div>
+
+        <div class="timer-bg"><div id="timer-bar" class="timer-fill"></div></div>
+
+        <div id="enemy-box" class="enemy-area">
+            <div id="speed-bonus-indicator">⚡ 5초 이내 공격 시 +50% 데미지!</div>
+            <div class="enemy-icon" id="enemy-icon">👾</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span id="enemy-name" style="font-weight:bold; color:#ef4444; font-size:13px;">Stage 1: 변종 바이러스</span>
+                <span id="enemy-intent" style="font-size:11px; color:#eab308; font-weight:bold;">⚔️ 세포막 공격 (10)</span>
+            </div>
+            <div style="font-size:10px; color:#f87171; text-align:left; margin-top:2px;" id="enemy-skill-desc">스킬: [산성 분비] 턴 시작 시 방어력 초기화</div>
+            <div class="hp-bar-bg"><div id="enemy-hp-fill" class="hp-bar-fill"></div></div>
+            <div style="font-size:11px; margin-top:3px; color:#94a3b8; text-align:right;">HP: <span id="enemy-hp-text" style="color:#f8fafc; font-weight:bold;">90 / 90</span></div>
+        </div>
+
+        <div id="combo-banner"></div>
+        <div id="hand-area" class="hand-area"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:11px; color:#94a3b8;">덱: <span id="deck-count" style="color:#f8fafc; font-weight:bold;">0</span>장 | 버린 카드: <span id="grave-count" style="color:#f8fafc; font-weight:bold;">0</span>장</span>
+            <button id="end-turn-btn" class="btn btn-sec" onclick="endTurn()">턴 종료 ⏭️ (<span id="timer-text">25</span>s)</button>
+        </div>
+
+        <div id="log-area" class="log-area">전투 준비 완료. 세포 방어막을 구축하세요.<br></div>
+    </div>
+</div>
+
+<!-- 콤보 족보 / 과학적 연계 오버레이 모달 -->
+<div id="combo-modal" class="modal">
+    <div class="modal-content" id="combo-modal-content">
+        <h2 style="color:#38bdf8; margin-bottom:10px; font-size:15px;">📖 세포소기관 연계 콤보 족보</h2>
+        <div style="max-height: 280px; overflow-y: auto;">
+            <div class="combo-row"><b style="color:#a855f7;">🟣 [전사 연계]</b> 핵 ➡️ 라이보솜 (방어 +5, 카드 +1 드로우)</div>
+            <div class="combo-row"><b style="color:#a855f7;">🟣 [단백질 분비 완결]</b> 라이보솜 ➡️ 소포체 ➡️ 골지체 (추가 뎀 +18)</div>
+            <div class="combo-row"><b style="color:#22c55e;">🟢 [세포 호흡 완결]</b> 마이트콘드리아 바탕질 ➡️ 마이트콘드리아 내막 (ATP +1, 추가 뎀 +12)</div>
+            <div class="combo-row"><b style="color:#22c55e;">🟢 [광합성 완결]</b> 엽록체 타이라코이드막 ➡️ 엽록체 스트로마 (HP +10, ATP +1)</div>
+            <div class="combo-row"><b style="color:#22c55e;">🟢 [에너지 공통 작용]</b> 마이트콘드리아 내막 ➡️ 엽록체 타이라코이드막 (방어 +8, 추가 뎀 +8)</div>
+            <div class="combo-row"><b style="color:#f97316;">🟠 [농도 역전 수송]</b> 단순확산 ➡️ 능동수송 (추가 뎀 +20)</div>
+            <div class="combo-row"><b style="color:#f97316;">🟠 [수분 항상성]</b> 삼투 ➡️ 액포 (방어막 +15, HP +6)</div>
+            <div class="combo-row"><b style="color:#f97316;">🟠 [엔도시토시스 및 세포 내 소화]</b> 세포막 ➡️ 라이소솜 (추가 뎀 +15)</div>
+        </div>
+        <button class="btn" style="margin-top:10px; width:100%;" onclick="toggleModal(false)">확인 및 닫기</button>
+    </div>
+</div>
+
+<!-- 학습 문항(퀴즈) 모달 -->
+<div id="quiz-modal" class="modal">
+    <div class="modal-content" style="border-color: #38bdf8;">
+        <h3 id="quiz-stage-title" style="color:#38bdf8; margin-bottom:8px; font-size:15px;">🧠 스테이지 진입 생명과학 문항</h3>
+        <p id="quiz-question" style="font-size:12.5px; line-height:1.4; color:#f8fafc; margin-bottom:12px; font-weight:bold;"></p>
+        <div id="quiz-options"></div>
+        <div id="quiz-explanation-area" style="display:none; margin-top:10px; padding:10px; background:#0f172a; border-radius:6px; font-size:11.5px; line-height:1.4;">
+            <div id="quiz-result-header" style="font-weight:bold; margin-bottom:4px;"></div>
+            <div id="quiz-explanation-text" style="color:#cbd5e1;"></div>
+            <button class="btn" style="width:100%; margin-top:8px;" onclick="closeQuizModal()">전투 개시 (+ATP 보상 수령)</button>
+        </div>
+    </div>
+</div>
+
+<!-- 오답/피드백 진단 모달 -->
+<div id="feedback-modal">
+    <div class="feedback-content">
+        <h3 style="color:#eab308; margin-bottom:8px; font-size:16px;">💡 세포 생리학 학습 피드백</h3>
+        <p id="feedback-text" style="font-size:12px; line-height:1.5; color:#cbd5e1; margin-bottom:12px;"></p>
+        <button class="btn" style="width:100%;" onclick="closeFeedback()">이해했습니다 (전투 계속)</button>
+    </div>
+</div>
+
+<!-- 보상 선택 모달 -->
+<div id="reward-modal" class="modal">
+    <div class="modal-content" style="text-align: center;">
+        <h2 style="color:#22c55e; margin-bottom:6px; font-size:16px;">🏆 Stage Cleared!</h2>
+        <p style="font-size:12px; color:#94a3b8; margin-bottom:12px;">다음 보스전을 위해 세포 강화 버프를 하나 선택하세요.</p>
+        <div id="reward-options"></div>
+    </div>
+</div>
+
+<!-- 컨티뉴 / 재도전 모달 -->
+<div id="gameover-modal" class="modal">
+    <div class="modal-content" style="text-align: center; border-color: #ef4444;">
+        <h2 style="color:#ef4444; margin-bottom:8px; font-size:18px;">💀 세포 파괴 (GAME OVER)</h2>
+        <p style="font-size:12px; color:#cbd5e1; margin-bottom:16px;">침입 병원체의 공격으로 세포막이 파손되고 생명 활동이 중단되었습니다.</p>
+        <div style="display:flex; gap:10px; justify-content:center;">
+            <button class="btn" style="background:#eab308; color:#000;" onclick="retryCurrentStage()">🔄 현재 스테이지 재도전 (Continue)</button>
+            <button class="btn btn-sec" onclick="location.reload()">🏠 처음부터 다시 하기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 최종 승리 및 랭킹 모달 -->
+<div id="victory-modal" class="modal">
+    <div class="modal-content" style="text-align: center;">
+        <h2 style="color:#38bdf8; margin-bottom:6px; font-size:18px;">🎉 VICTORY! 생존 성공</h2>
+        <p style="font-size:13px; color:#cbd5e1; margin-bottom:10px;">모든 침입 병원체를 격퇴하고 세포를 수호했습니다!</p>
+        <div style="background:#0f172a; padding:10px; border-radius:8px; border:1px solid #334155; margin-bottom:12px;">
+            <span style="font-size:14px; color:#eab308; font-weight:bold;">⏱️ 총 클리어 타임: <span id="final-time">0</span>초</span>
+        </div>
+        <div style="margin-bottom:12px; display:flex; gap:6px; justify-content:center;">
+            <input type="text" id="player-name-input" placeholder="플레이어 이름" style="background:#0f172a; border:1px solid #334155; color:#fff; padding:6px 10px; border-radius:4px; font-size:12px;">
+            <button class="btn" onclick="saveRanking()">랭킹 등록</button>
+        </div>
+        <h3 style="font-size:13px; color:#38bdf8; margin-bottom:6px;">🏆 명예의 전당 (Top 5)</h3>
+        <table class="rank-table">
+            <thead><tr><th>순위</th><th>이름</th><th>클리어 타임</th></tr></thead>
+            <tbody id="rank-tbody"></tbody>
+        </table>
+        <button class="btn btn-sec" style="margin-top:12px; width:100%;" onclick="location.reload()">새 게임 시작 🔄</button>
+    </div>
+</div>
+
+<script>
+// 1. 카드 데이터베이스 (과학적 세부 구조 및 기능 엄격 교정)
+var CARD_DB = [
+    { id:'nucleus', name:'핵', cost:1, group:'secretion', desc:'이중막 구조(핵막, 핵공). DNA 유전정보를 mRNA로 전사하여 핵공을 통해 세포질로 전달.<br><b>방어 +5, 드로우 +1</b>' },
+    { id:'ribosome', name:'라이보솜', cost:1, group:'secretion', desc:'막 구조 부재. rRNA와 단백질로 구성되며 mRNA 유전정보를 바탕으로 아미노산을 번역/단백질 합성.<br><b>공격력 8</b>' },
+    { id:'er', name:'소포체', cost:1, group:'secretion', desc:'단일막 구조. 조면소포체(라이보솜 부착, 단백질 가공/수송) 및 활면소포체(지질 합성) 구별.<br><b>방어 +6</b>' },
+    { id:'golgi', name:'골지체', cost:1, group:'secretion', desc:'단일막 막주머니 구조. 소포체 유래 단백질을 최종 수정, 분류하여 분비 소낭에 포장 배출.<br><b>공격력 12</b>' },
+    { id:'mito_matrix', name:'마이트콘드리아 바탕질', cost:1, group:'energy', desc:'이중막 내부 바탕질. TCA 회로가 진행되어 NADH와 FADH₂ 생성 (석신산 탈수소효소는 내막 위치 예외).<br><b>ATP +1 회복</b>' },
+    { id:'mito_inner', name:'마이트콘드리아 내막', cost:1, group:'energy', desc:'주름진 크리스타(표면적 넓음). 전자전달계와 ATP 합성효소가 있어 H⁺ 농도 기울기로 ATP 생성.<br><b>공격력 10</b>' },
+    { id:'chloro_thy', name:'타이라코이드막', cost:1, group:'energy', desc:'엽록체 타이라코이드막. 엽록소와 광계 존재. 빛에너지를 이용해 H⁺ 기울기 형성 ➔ ATP, NADPH 생성.<br><b>ATP +1, 방어 +4</b>' },
+    { id:'chloro_str', name:'스트로마', cost:1, group:'energy', desc:'엽록체 이중막 내부 기질. 캘빈 회로 진행. ATP와 NADPH를 이용해 CO₂를 고정하고 포도당 합성.<br><b>HP 6 회복</b>' },
+    { id:'lysosome', name:'라이소솜', cost:1, group:'homeo', desc:'골지체 유래 단일막 구조. 가수분해 효소를 함유하여 이물질 및 엔도시토시스 유입 물질 세포 내 소화.<br><b>공격력 14</b>' },
+    { id:'membrane', name:'세포막', cost:1, group:'homeo', desc:'인지질 이중층과 막단백질 구조. 선택적 투과성을 가져 물질 출입 조절 및 엔도시토시스 수송.<br><b>방어 +8</b>' },
+    { id:'active_trans', name:'능동수송', cost:2, group:'homeo', desc:'막단백질을 통해 ATP를 소모하여 저농도에서 고농도로 농도 기울기에 역행하는 물질 수송.<br><b>공격력 18</b>' },
+    { id:'simple_diff', name:'단순확산', cost:0, group:'homeo', desc:'인지질 이중층을 통해 고농도에서 저농도로 ATP 소모 없이 물질이 직접 확산되는 수송.<br><b>공격력 5</b>' },
+    { id:'osmosis', name:'삼투', cost:1, group:'homeo', desc:'선택적 투과성막을 경계로 용질 농도가 낮은 쪽에서 높은 쪽으로 물 분자가 이동하는 현상.<br><b>HP 5 회복, 방어 +5</b>' },
+    { id:'vacuole', name:'액포', cost:1, group:'homeo', desc:'단일막 구조. 물, 노폐물, 삼투물질을 저장하여 식물 세포의 삼투압 및 팽압 유지.<br><b>방어 +10</b>' }
+];
+
+// 2. 스테이지 데이터
+var STAGES = [
+    { stage: 1, name: '변종 바이러스', icon: '👾', hp: 90, maxHp: 90, atk: 10, skill: 'acid', skillDesc: '스킬: [산성 분비] 턴 시작 시 방어력 초기화', intent: '⚔️ 세포막 공격 (10)' },
+    { stage: 2, name: '돌연변이 세균', icon: '🦠', hp: 140, maxHp: 140, atk: 15, skill: 'discard', skillDesc: '스킬: [세포 독소] 턴 시작 시 무작위 카드 1장 파괴', intent: '⚔️ 독소 배출 공격 (15)' },
+    { stage: 3, name: '악성 종양 세포', icon: '🧫', hp: 200, maxHp: 200, atk: 22, skill: 'drain', skillDesc: '스킬: [에너지 강탈] 다음 턴 ATP -1 & HP 5 회복', intent: '⚔️ 침습 공격 (22)' }
+];
+
+// 3. 스테이지별 6문항 확장 학습 퀴즈 데이터베이스 (6개 주제 고르게 반영 + 비상 교과서 표준 난이도)
+var QUIZ_POOL = [
+    // Stage 1 Pool (2문항)
+    [
+        {
+            question: "Q1-A. [단백질 합성 및 분비 과정] 핵에서 시작하여 합성된 단백질이 세포 밖으로 분비되기까지의 유기적인 수송 경로는?",
+            options: [
+                "① 핵 ➔ 라이보솜 ➔ 소포체 ➔ 골지체 ➔ 세포막",
+                "② 라이보솜 ➔ 소포체 ➔ 핵 ➔ 골지체 ➔ 세포막",
+                "③ 핵 ➔ 골지체 ➔ 소포체 ➔ 라이보솜 ➔ 세포막",
+                "④ 소포체 ➔ 라이보솜 ➔ 핵 ➔ 골지체 ➔ 세포막"
+            ],
+            correct: 0,
+            explanation: "<b>[정답 해설 - 단백질 분비 경로]</b><br>핵에서 mRNA가 전사된 후, 막이 없는 <b>라이보솜</b>에서 번역됩니다. 이 단백질은 <b>소포체</b>에서 변형·가공되어 수송 소낭을 통해 <b>골지체</b>로 이동하고, 골지체에서 최종 포장된 후 분비 소낭을 통해 <b>세포막</b> 밖으로 외분비됩니다."
+        },
+        {
+            question: "Q1-B. [세포 소기관의 막 구조 구분] 다음 중 세포 소기관의 막 구조 연결이 올바른 것은?",
+            options: [
+                "① 라이보솜 - 막이 없는 구조 (rRNA + 단백질)",
+                "② 핵 - 단일막 구조",
+                "③ 골지체 - 이중막 구조",
+                "④ 라이소솜 - 막이 없는 구조"
+            ],
+            correct: 0,
+            explanation: "<b>[정답 해설 - 소기관 막 구조]</b><br>• <b>막 없음:</b> 라이보솜, 중심체<br>• <b>이중막:</b> 핵, 마이트콘드리아, 엽록체<br>• <b>단일막:</b> 소포체, 골지체, 라이소솜, 액포"
+        }
+    ],
+    // Stage 2 Pool (2문항)
+    [
+        {
+            question: "Q2-A. [마이트콘드리아의 세부 구조와 세포 호흡] 마이트콘드리아의 내부 구조와 기능에 대한 설명으로 가장 정확한 것은?",
+            options: [
+                "① 주름진 크리스타(내막)에는 전자전달계와 ATP 합성효소가 존재한다.",
+                "② 바탕질에서는 명반응이 일어나며 빛에너지를 흡수한다.",
+                "③ 내막에서는 포도당을 직접 고정하여 캘빈 회로를 진행한다.",
+                "④ 바탕질의 석신산 탈수소효소는 막에 존재하지 않는 완벽한 유체 효소이다."
+            ],
+            correct: 0,
+            explanation: "<b>[정답 해설 - 마이트콘드리아 세부 구조]</b><br>마이트콘드리아의 <b>주름진 크리스타(내막)</b>는 표면적이 넓어 전자전달계와 ATP 합성효소가 효율적으로 위치하며 H⁺ 농도 기울기를 통한 ATP 생성을 담당합니다. 바탕질에서는 TCA 회로가 일어납니다."
+        },
+        {
+            question: "Q2-B. [엽록체의 세부 구조와 광합성] 엽록체의 내부 구조 중 광계와 엽록소가 존재하여 빛에너지를 흡수하는 장소는?",
+            options: [
+                "① 타이라코이드막 (그라나)",
+                "② 스트로마 기질",
+                "③ 마이트콘드리아 바탕질",
+                "④ 이중막의 외막"
+            ],
+            correct: 0,
+            explanation: "<b>[정답 해설 - 엽록체 내부 구조]</b><br>엽록체의 <b>타이라코이드막</b>에는 엽록소와 광계가 존재하여 빛에너지를 흡수하는 <b>명반응</b>이 진행됩니다. 타이라코이드가 쌓인 구조를 <b>그라나</b>라고 하며, 기질 부위인 <b>스트로마</b>에서는 CO₂를 고정하는 캘빈 회로가 일어납니다."
+        }
+    ],
+    // Stage 3 Pool (2문항)
+    [
+        {
+            question: "Q3-A. [세포막 수송 - 삼투와 능동수송] 세포막을 통한 물질 수송 메커니즘에 대한 설명으로 맞는 것은?",
+            options: [
+                "① 능동수송은 수송 단백질을 이용하여 ATP를 소모하며 저농도에서 고농도로 물질을 이동시킨다.",
+                "② 삼투는 용질이 직접 막을 통과하여 고농도에서 저농도로 이동하는 현상이다.",
+                "③ 단순확산은 막단백질과 ATP를 반드시 소모하며 농도 기울기에 역행한다.",
+                "④ 능동수송은 에너지 소모 없이 확산으로만 물질이 이동한다."
+            ],
+            correct: 0,
+            explanation: "<b>[정답 해설 - 물질 수송]</b><br>• <b>능동수송:</b> 수송 단백질과 ATP 에너지를 소모하여 저농도 ➔ 고농도로 농도 기울기에 역행하여 물질 수송.<br>• <b>삼투:</b> 선택적 투과막을 경계로 용질 농도가 낮은 쪽(물 많은 쪽)에서 높은 쪽으로 <b>물 분자</b>가 이동하는 현상."
+        },
+        {
+            question: "Q3-B. [소기관 사이의 유기적인 협력 관계] 라이소솜과 세포막, 마이트콘드리아와 엽록체의 협력 관계 설명 중 옳은 것은?",
+            options: [
+                "① 세포막의 엔도시토시스로 유입된 물질은 라이소솜의 가수분해 효소에 의해 세포 내 소화가 이루어진다.",
+                "② 마이트콘드리아 내막과 엽록체 타이라코이드막은 물리적으로 직접 연결되어 물을 교환한다.",
+                "③ 라이소솜에서 합성된 DNA가 세포막을 통해 직접 밖으로 배출된다.",
+                "④ 엽록체 스트로마와 마이트콘드리아 크리스타는 동일한 광합성 색소를 공유한다."
+            ],
+            correct: 0,
+            explanation: "<b>[정답 해설 - 소기관 유기적 협력]</b><br><b>세포막</b>의 포입 작용(엔도시토시스)으로 유입된 외부 물질은 소낭 형태로 <b>라이소솜</b>과 융합되어 가수분해 효소에 의해 소화 분해됩니다. 한편, 마이트콘드리아와 엽록체는 직접 연결되지 않지만 H⁺ 농도 기울기를 이용해 ATP를 생산/전환한다는 대사적 공통점과 협력 관계를 가집니다."
+        }
+    ]
+];
+
+// 전역 상태 관리
+var selectedCards = [];
+var initialDeckCards = []; // 재도전 시 리셋을 위해 최초 선택 10장 저장
+var currentStageIdx = 0;
+var turnTimer = null;
+var gameTimer = null;
+var totalElapsedTime = 0;
+var timeLeft = 25;
+var nextTurnAtpPenalty = 0;
+var isProcessingTurn = false;
+var isTimerPaused = false;
+var comboHistory = [];
+var stageQuizRewardsClaimed = [false, false, false]; // 퀴즈 ATP 보상 중복 수령 방지
+
+var gameState = {
+    hp: 50, maxHp: 50, atp: 3, maxAtp: 3, drawCount: 4, shield: 0,
+    enemyHp: 90, enemyMaxHp: 90, deck: [], hand: [], grave: []
+};
+
+function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+        var r = Math.floor(Math.random() * (i + 1));
+        var temp = arr[i]; arr[i] = arr[r]; arr[r] = temp;
+    }
+    return arr;
+}
+
+function initSetup() {
+    var grid = document.getElementById('deck-select-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (var i = 0; i < CARD_DB.length; i++) {
+        (function(card) {
+            var item = document.createElement('div');
+            item.className = 'card-item card-' + card.group;
+            item.onclick = function() { toggleSelect(card.id, item); };
+            item.innerHTML = 
+                '<div class="cost">' + card.cost + '</div>' +
+                '<div class="card-title">' + card.name + '</div>' +
+                '<span class="card-tag">' + (card.group === 'secretion' ? '단백질분비' : card.group === 'energy' ? '에너지' : '수송/항상성') + '</span>' +
+                '<div class="card-desc">' + card.desc + '</div>';
+            grid.appendChild(item);
+        })(CARD_DB[i]);
+    }
+}
+
+function toggleSelect(id, el) {
+    var idx = selectedCards.indexOf(id);
+    if (idx > -1) {
+        selectedCards.splice(idx, 1);
+        el.classList.remove('selected');
+    } else if (selectedCards.length < 10) {
+        selectedCards.push(id);
+        el.classList.add('selected');
+    }
+    document.getElementById('select-count').innerText = '선택된 카드: ' + selectedCards.length + ' / 10';
+    document.getElementById('start-btn').disabled = (selectedCards.length !== 10);
+}
+
+function applyPreset(type) {
+    selectedCards = [];
+    var items = document.querySelectorAll('.card-item');
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
+
+    if (type === 'secretion') {
+        selectedCards = ['nucleus', 'ribosome', 'er', 'golgi', 'lysosome', 'membrane', 'simple_diff', 'active_trans', 'osmosis', 'vacuole'];
+    } else if (type === 'energy') {
+        selectedCards = ['mito_matrix', 'mito_inner', 'chloro_thy', 'chloro_str', 'active_trans', 'simple_diff', 'osmosis', 'membrane', 'vacuole', 'lysosome'];
+    }
+
+    for (var j = 0; j < CARD_DB.length; j++) {
+        if (selectedCards.indexOf(CARD_DB[j].id) > -1) {
+            items[j].classList.add('selected');
+        }
+    }
+    document.getElementById('select-count').innerText = '선택된 카드: ' + selectedCards.length + ' / 10';
+    document.getElementById('start-btn').disabled = (selectedCards.length !== 10);
+}
+
+function drawCards(n) {
+    for (var i = 0; i < n; i++) {
+        if (gameState.deck.length === 0) {
+            if (gameState.grave.length === 0) break;
+            gameState.deck = gameState.grave.slice();
+            gameState.grave = [];
+            shuffle(gameState.deck);
+        }
+        if (gameState.deck.length > 0) gameState.hand.push(gameState.deck.pop());
+    }
+    renderUI();
+}
+
+function startGame() {
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('game-screen').style.display = 'flex';
+
+    gameState.hp = 50; gameState.maxHp = 50;
+    gameState.atp = 3; gameState.maxAtp = 3;
+    gameState.drawCount = 4; gameState.shield = 0;
+    gameState.deck = []; gameState.hand = []; gameState.grave = [];
+    nextTurnAtpPenalty = 0;
+    isProcessingTurn = false;
+    stageQuizRewardsClaimed = [false, false, false];
+
+    // 최초 선택 카드 10장 저장
+    initialDeckCards = selectedCards.slice();
+
+    for (var i = 0; i < selectedCards.length; i++) {
+        for (var j = 0; j < CARD_DB.length; j++) {
+            if (CARD_DB[j].id === selectedCards[i]) {
+                gameState.deck.push(CARD_DB[j]);
+                break;
+            }
+        }
+    }
+    shuffle(gameState.deck);
+    startTotalTimer();
+    triggerStageQuiz(0);
+}
+
+function startTotalTimer() {
+    clearInterval(gameTimer);
+    totalElapsedTime = 0;
+    gameTimer = setInterval(function() {
+        if (!isTimerPaused) {
+            totalElapsedTime++;
+            document.getElementById('total-time').innerText = totalElapsedTime;
+        }
+    }, 1000);
+}
+
+function triggerStageQuiz(stageIdx) {
+    isTimerPaused = true;
+    currentStageIdx = stageIdx;
+    
+    // 스테이지별 무작위 퀴즈 1문항 선택
+    var pool = QUIZ_POOL[stageIdx];
+    var quiz = pool[Math.floor(Math.random() * pool.length)];
+    
+    document.getElementById('quiz-stage-title').innerText = '🧠 Stage ' + (stageIdx + 1) + ' 진입 생명과학 문항';
+    document.getElementById('quiz-question').innerText = quiz.question;
+    
+    var optsContainer = document.getElementById('quiz-options');
+    optsContainer.innerHTML = '';
+    document.getElementById('quiz-explanation-area').style.display = 'none';
+
+    for (var i = 0; i < quiz.options.length; i++) {
+        (function(optIdx) {
+            var btn = document.createElement('button');
+            btn.className = 'quiz-option-btn';
+            btn.innerText = quiz.options[optIdx];
+            btn.onclick = function() { checkQuizAnswer(stageIdx, optIdx, quiz); };
+            optsContainer.appendChild(btn);
+        })(i);
+    }
+
+    document.getElementById('quiz-modal').style.display = 'flex';
+}
+
+function checkQuizAnswer(stageIdx, selectedOpt, quiz) {
+    var isCorrect = (selectedOpt === quiz.correct);
+    
+    document.getElementById('quiz-options').style.display = 'none';
+    var expArea = document.getElementById('quiz-explanation-area');
+    var header = document.getElementById('quiz-result-header');
+    var text = document.getElementById('quiz-explanation-text');
+
+    if (isCorrect) {
+        if (!stageQuizRewardsClaimed[stageIdx]) {
+            header.innerHTML = '<span style="color:#22c55e;">정답입니다! 🎉 (+1 ATP 보상 수령)</span>';
+            gameState.atp = Math.min(gameState.maxAtp + 1, gameState.atp + 1);
+            stageQuizRewardsClaimed[stageIdx] = true; // 보스전 재도전 시 ATP 중복 보상 누적 방지
+        } else {
+            header.innerHTML = '<span style="color:#22c55e;">정답입니다! 🎉 (이미 보상을 수령한 스테이지입니다)</span>';
+        }
+    } else {
+        header.innerHTML = '<span style="color:#ef4444;">오답입니다. 💡 (과학적 해설 확인 후 진행)</span>';
+    }
+    
+    text.innerHTML = '<b>[정답]: ' + quiz.options[quiz.correct] + '</b><br><br>' + quiz.explanation;
+    expArea.style.display = 'block';
+}
+
+function closeQuizModal() {
+    document.getElementById('quiz-options').style.display = 'block';
+    document.getElementById('quiz-modal').style.display = 'none';
+    isTimerPaused = false;
+    loadStage(currentStageIdx);
+}
+
+function loadStage(idx) {
+    currentStageIdx = idx;
+    var stage = STAGES[idx];
+    gameState.enemyHp = stage.hp;
+    gameState.enemyMaxHp = stage.maxHp;
+
+    document.getElementById('stage-badge').innerText = 'Stage ' + (idx + 1) + '/3';
+    document.getElementById('enemy-icon').innerText = stage.icon;
+    document.getElementById('enemy-name').innerText = 'Stage ' + (idx + 1) + ': ' + stage.name;
+    document.getElementById('enemy-intent').innerText = stage.intent;
+    document.getElementById('enemy-skill-desc').innerText = stage.skillDesc;
+
+    addLog('⚠️ <b>[' + stage.name + ']</b>가 등장했습니다!');
+    drawCards(gameState.drawCount - gameState.hand.length);
+    startTurnPhase();
+}
+
+function startTurnPhase() {
+    comboHistory = [];
+    var stage = STAGES[currentStageIdx];
+    
+    if (stage.skill === 'acid') {
+        triggerAcidVFX();
+        gameState.shield = 0;
+        addLog('🧪 보스의 <b style="color:#a855f7;">[산성 분비]</b>! 방어막이 모두 산화 파괴됩니다!');
+    } else if (stage.skill === 'discard' && gameState.hand.length > 0) {
+        var rIdx = Math.floor(Math.random() * gameState.hand.length);
+        var discarded = gameState.hand.splice(rIdx, 1)[0];
+        gameState.grave.push(discarded);
+        triggerDiscardVFX(rIdx, function() { renderUI(); });
+        addLog('☣️ 보스의 <b style="color:#ef4444;">[세포 독소]</b>! 카드 <b>[' + discarded.name + ']</b>(이)가 파괴됩니다!');
+    }
+
+    isProcessingTurn = false;
+    resetTimer();
+    renderUI();
+}
+
+function resetTimer() {
+    clearInterval(turnTimer);
+    timeLeft = 25;
+    updateTimerUI();
+
+    turnTimer = setInterval(function() {
+        if (!isTimerPaused && !isProcessingTurn) {
+            timeLeft--;
+            updateTimerUI();
+            if (timeLeft <= 0) {
+                clearInterval(turnTimer);
+                showEducationalFeedback("시간 초과 (신속한 카드 판단 필요)", "<b>[오답/지연 피드백]</b> 세포 생리 작용은 속도가 중요합니다.<br>단백질 수송(라이보솜➔소포체➔골지체)이나 세포호흡(마이트콘드리아 바탕질➔내막) 시너지를 미리 판단하여 25초 이내에 제출하세요.");
+                endTurn();
+            }
+        }
+    }, 1000);
+}
+
+function showEducationalFeedback(title, htmlMsg) {
+    isTimerPaused = true;
+    document.getElementById('feedback-text').innerHTML = '<b>' + title + '</b><br><br>' + htmlMsg;
+    document.getElementById('feedback-modal').style.display = 'flex';
+}
+
+function closeFeedback() {
+    document.getElementById('feedback-modal').style.display = 'none';
+    isTimerPaused = false;
+}
+
+function updateTimerUI() {
+    document.getElementById('timer-text').innerText = timeLeft;
+    var bar = document.getElementById('timer-bar');
+    bar.style.width = ((timeLeft / 25) * 100) + '%';
+    
+    var speedIndicator = document.getElementById('speed-bonus-indicator');
+    if (timeLeft >= 20) {
+        speedIndicator.style.display = 'block';
+        speedIndicator.innerText = '⚡ 신속 공격 보너스 (+50% 데미지)';
+        speedIndicator.style.color = '#facc15';
+    } else if (timeLeft >= 15) {
+        speedIndicator.style.display = 'block';
+        speedIndicator.innerText = '⚡ 퀵 공격 보너스 (+25% 데미지)';
+        speedIndicator.style.color = '#38bdf8';
+    } else {
+        speedIndicator.style.display = 'none';
+    }
+
+    if (timeLeft <= 7) bar.classList.add('urgent');
+    else bar.classList.remove('urgent');
+}
+
+function showComboModal(title, buffText, bioExp) {
+    isTimerPaused = true;
+    var modal = document.getElementById('combo-modal');
+    var content = document.getElementById('combo-modal-content');
+    if (content) {
+        content.innerHTML = 
+            '<h2 style="color:#38bdf8; margin-bottom:10px; font-size:16px;">' + title + '</h2>' +
+            '<div style="background:#0f172a; border:1px solid #38bdf8; border-radius:8px; padding:10px; margin-bottom:10px; font-size:12.5px; color:#22c55e; font-weight:bold;">' +
+                '🎁 인게임 보상: ' + buffText +
+            '</div>' +
+            '<div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:10px; font-size:11.5px; color:#cbd5e1; line-height:1.5; margin-bottom:12px;">' +
+                bioExp +
+            '</div>' +
+            '<button class="btn" style="width:100%;" onclick="toggleModal(false)">확인 및 전투 계속</button>';
+    }
+    modal.style.display = 'flex';
+}
+
+function openComboCodex() {
+    isTimerPaused = true;
+    var modal = document.getElementById('combo-modal');
+    var content = document.getElementById('combo-modal-content');
+    if (content) {
+        content.innerHTML = 
+            '<h2 style="color:#38bdf8; margin-bottom:10px; font-size:15px;">📖 세포소기관 연계 콤보 족보</h2>' +
+            '<div style="max-height: 280px; overflow-y: auto;">' +
+                '<div class="combo-row"><b style="color:#a855f7;">🟣 [전사 연계]</b> 핵 ➡️ 라이보솜 (방어 +5, 카드 +1 드로우)</div>' +
+                '<div class="combo-row"><b style="color:#a855f7;">🟣 [단백질 분비 완결]</b> 라이보솜 ➡️ 소포체 ➡️ 골지체 (추가 뎀 +18)</div>' +
+                '<div class="combo-row"><b style="color:#22c55e;">🟢 [세포 호흡 완결]</b> 마이트콘드리아 바탕질 ➡️ 마이트콘드리아 내막 (ATP +1, 추가 뎀 +12)</div>' +
+                '<div class="combo-row"><b style="color:#22c55e;">🟢 [광합성 완결]</b> 엽록체 타이라코이드막 ➡️ 엽록체 스트로마 (HP +10, ATP +1)</div>' +
+                '<div class="combo-row"><b style="color:#22c55e;">🟢 [에너지 공통 작용]</b> 마이트콘드리아 내막 ➡️ 엽록체 타이라코이드막 (방어 +8, 추가 뎀 +8)</div>' +
+                '<div class="combo-row"><b style="color:#f97316;">🟠 [농도 역전 수송]</b> 단순확산 ➡️ 능동수송 (추가 뎀 +20)</div>' +
+                '<div class="combo-row"><b style="color:#f97316;">🟠 [수분 항상성]</b> 삼투 ➡️ 액포 (방어막 +15, HP +6)</div>' +
+                '<div class="combo-row"><b style="color:#f97316;">🟠 [엔도시토시스 및 세포 내 소화]</b> 세포막 ➡️ 라이소솜 (추가 뎀 +15)</div>' +
+            '</div>' +
+            '<button class="btn" style="margin-top:10px; width:100%;" onclick="toggleModal(false)">확인 및 닫기</button>';
+    }
+    modal.style.display = 'flex';
+}
+
+function playCard(handIdx) {
+    if (isProcessingTurn) return;
+    var card = gameState.hand[handIdx];
+    if (gameState.atp < card.cost) {
+        addLog('⚠️ <span style="color:#eab308;">ATP(에너지) 부족!</span>');
+        return;
+    }
+
+    gameState.atp -= card.cost;
+    gameState.hand.splice(handIdx, 1);
+    gameState.grave.push(card);
+    comboHistory.push(card.id);
+
+    addLog('🔮 <b>[' + card.name + ']</b> 카드 사용');
+
+    var speedMultiplier = 1.0;
+    var isSpeedBonus = false;
+    if (timeLeft >= 20) { speedMultiplier = 1.5; isSpeedBonus = true; }
+    else if (timeLeft >= 15) { speedMultiplier = 1.25; isSpeedBonus = true; }
+
+    var calcDmg = function(base) { return Math.round(base * speedMultiplier); };
+
+    if (card.id === 'nucleus') { gameState.shield += 5; drawCards(1); }
+    else if (card.id === 'ribosome') { dealDamage(calcDmg(8), isSpeedBonus); }
+    else if (card.id === 'er') { gameState.shield += 6; }
+    else if (card.id === 'golgi') { dealDamage(calcDmg(12), isSpeedBonus); }
+    else if (card.id === 'mito_matrix') { gameState.atp += 1; }
+    else if (card.id === 'mito_inner') { dealDamage(calcDmg(10), isSpeedBonus); }
+    else if (card.id === 'chloro_thy') { gameState.atp += 1; gameState.shield += 4; }
+    else if (card.id === 'chloro_str') { healPlayer(6); }
+    else if (card.id === 'lysosome') { dealDamage(calcDmg(14), isSpeedBonus); }
+    else if (card.id === 'membrane') { gameState.shield += 8; }
+    else if (card.id === 'active_trans') { dealDamage(calcDmg(18), isSpeedBonus); }
+    else if (card.id === 'simple_diff') { dealDamage(calcDmg(5), isSpeedBonus); }
+    else if (card.id === 'osmosis') { healPlayer(5); gameState.shield += 5; }
+    else if (card.id === 'vacuole') { gameState.shield += 10; }
+
+    // 콤보 체크 (카드 족보 및 실제 로직 100% 일치 검증)
+    var len = comboHistory.length;
+    var prev = len >= 2 ? comboHistory[len - 2] : null;
+    var prevPrev = len >= 3 ? comboHistory[len - 3] : null;
+
+    if (prev === 'nucleus' && card.id === 'ribosome') {
+        showComboModal(
+            '✨ [전사 & 번역 연계]',
+            '방어막 +5 & 카드 +1 드로우',
+            '<b>[과학적 구조와 기능 연결]</b><br>이중막 핵막의 핵공을 통해 DNA 유전정보(mRNA)가 전사되어 세포질로 이동하고, rRNA와 단백질로 구성된 <b>라이보솜</b>이 이를 번역하여 아미노산 사슬을 합성합니다.'
+        );
+        gameState.shield += 5; drawCards(1);
+    } 
+    else if (prevPrev === 'ribosome' && prev === 'er' && card.id === 'golgi') {
+        showComboModal(
+            '💥 [단백질 분비 경로 완결 (3단계)]',
+            '추가 데미지 +18 폭발',
+            '<b>[과학적 구조와 기능 연결]</b><br>라이보솜에서 번역된 분비 단백질이 조면소포체 내부로 들어와 입체 가공/수송 소낭에 담긴 후, 단일막 <b>골지체</b>로 전달되어 최종 수정 및 포장되어 세포 외 분비 소낭으로 완성됩니다.'
+        );
+        dealDamage(calcDmg(18), isSpeedBonus);
+    }
+    else if (prev === 'mito_matrix' && card.id === 'mito_inner') {
+        showComboModal(
+            '⚡ [마이트콘드리아 세포 호흡 완결]',
+            'ATP +1 회복 & 추가 데미지 +12',
+            '<b>[과학적 구조와 기능 연결]</b><br>마이트콘드리아 <b>바탕질</b>의 TCA 회로에서 생성된 NADH와 FADH₂가 주름진 <b>크리스타(내막)</b>의 전자전달계로 전자를 전달하고, H⁺ 농도 기울기와 ATP 합성효소를 통해 ATP가 대량 생산됩니다.'
+        );
+        gameState.atp += 1; dealDamage(calcDmg(12), isSpeedBonus);
+    } 
+    else if (prev === 'chloro_thy' && card.id === 'chloro_str') {
+        showComboModal(
+            '🌿 [엽록체 광합성 완결]',
+            'HP +10 회복 & ATP +1',
+            '<b>[과학적 구조와 기능 연결]</b><br><b>타이라코이드막(그라나)</b>의 엽록소 명반응에서 생성된 ATP와 NADPH가 이중막 내부 기질인 <b>스트로마</b>의 캘빈 회로로 공급되어 CO₂를 고정하고 포도당을 합성합니다.'
+        );
+        healPlayer(10); gameState.atp += 1;
+    } 
+    else if (prev === 'mito_inner' && card.id === 'chloro_thy') {
+        showComboModal(
+            '⚡ [에너지 대사계 공통 작용]',
+            '방어막 +8, 추가 데미지 +8',
+            '<b>[과학적 구조와 기능 연결]</b><br>마이트콘드리아 내막(크리스타)과 엽록체 타이라코이드막(그라나)은 직접 연결되지 않으나, 막을 경계로 H⁺ 농도 기울기와 ATP 합성효소를 이용해 <b>ATP를 생산 및 전환하는 공통적인 에너지 기전</b>을 공유합니다.'
+        );
+        gameState.shield += 8; dealDamage(calcDmg(8), isSpeedBonus);
+    } 
+    else if (prev === 'simple_diff' && card.id === 'active_trans') {
+        showComboModal(
+            '🔥 [세포막 물질 수송 역전]',
+            '추가 데미지 +20',
+            '<b>[과학적 구조와 기능 연결]</b><br>인지질 이중층을 직접 통과하는 <b>단순확산</b>(고➔저농도)에 이어, 수송 단백질과 ATP를 소모하여 농도 기울기에 역행하는 <b>능동수송</b>으로 세포 물질 농도를 역전시킵니다.'
+        );
+        dealDamage(calcDmg(20), isSpeedBonus);
+    } 
+    else if (prev === 'osmosis' && card.id === 'vacuole') {
+        showComboModal(
+            '💧 [수분 항상성 및 팽압 유지]',
+            '방어막 +15, HP +6 회복',
+            '<b>[과학적 구조와 기능 연결]</b><br>선택적 투과막을 통해 저농도에서 고농도로 물이 이동하는 <b>삼투</b> 현상과, 단일막 <b>액포</b>의 수분 조절 작용으로 식물 세포의 삼투압 및 팽압 항상성을 극대화합니다.'
+        );
+        gameState.shield += 15; healPlayer(6);
+    } 
+    else if (prev === 'membrane' && card.id === 'lysosome') {
+        showComboModal(
+            '🧪 [엔도시토시스 및 세포 내 소화]',
+            '추가 데미지 +15',
+            '<b>[과학적 구조와 기능 연결]</b><br><b>세포막</b>의 선택적 투과성 및 엔도시토시스(포입 작용)로 유입된 외부 물질이 소낭을 통해 가수분해 효소를 가진 단일막 <b>라이소솜</b>으로 전달되어 세포 내 소화 및 파손 작용이 일어납니다.'
+        );
+        dealDamage(calcDmg(15), isSpeedBonus);
+    }
+
+    renderUI();
+}
+
+function triggerAcidVFX() {
+    var overlay = document.getElementById('acid-overlay');
+    overlay.style.display = 'block'; overlay.classList.remove('acid-anim');
+    void overlay.offsetWidth; overlay.classList.add('acid-anim');
+    setTimeout(function() { overlay.style.display = 'none'; }, 850);
+}
+
+function triggerDiscardVFX(handIdx, callback) {
+    var handEl = document.getElementById('hand-area');
+    var cards = handEl.getElementsByClassName('game-card');
+    if (cards[handIdx]) {
+        cards[handIdx].classList.add('card-burn');
+        setTimeout(function() { callback(); }, 550);
+    } else { callback(); }
+}
+
+function triggerDrainVFX() {
+    var beam = document.getElementById('drain-beam');
+    beam.style.display = 'block'; beam.classList.remove('beam-anim');
+    void beam.offsetWidth; beam.classList.add('beam-anim');
+    setTimeout(function() { beam.style.display = 'none'; }, 700);
+}
+
+function dealDamage(amount, isSpeedBonus) {
+    if (gameState.enemyHp <= 0) return;
+    gameState.enemyHp = Math.max(0, gameState.enemyHp - amount);
+    addLog('💥 적에게 <b style="color:#ef4444;">' + amount + '</b>의 피해!');
+    triggerEnemyHitFX(amount, isSpeedBonus);
+
+    if (gameState.enemyHp === 0) {
+        isProcessingTurn = true;
+        clearInterval(turnTimer);
+        setTimeout(function() {
+            if (currentStageIdx + 1 < STAGES.length) { openRewardModal(); }
+            else { clearInterval(gameTimer); showVictoryModal(); }
+        }, 300);
+    }
+}
+
+function showVictoryModal() {
+    isTimerPaused = true;
+    document.getElementById('final-time').innerText = totalElapsedTime;
+    renderRankingTable();
+    document.getElementById('victory-modal').style.display = 'flex';
+}
+
+function getRanks() {
+    try {
+        var r = localStorage.getItem('cell_survival_ranks');
+        return r ? JSON.parse(r) : [];
+    } catch(e) { return []; }
+}
+
+function saveRanking() {
+    var name = document.getElementById('player-name-input').value.trim() || '익명 세포';
+    var ranks = getRanks();
+    ranks.push({ name: name, time: totalElapsedTime });
+    ranks.sort(function(a, b) { return a.time - b.time; });
+    ranks = ranks.slice(0, 5);
+    try { localStorage.setItem('cell_survival_ranks', JSON.stringify(ranks)); } catch(e) {}
+    renderRankingTable();
+    alert('🏆 랭킹 등록이 완료되었습니다!');
+}
+
+function renderRankingTable() {
+    var ranks = getRanks();
+    var tbody = document.getElementById('rank-tbody');
+    tbody.innerHTML = '';
+    if (ranks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="color:#94a3b8;">등록된 기록이 없습니다.</td></tr>';
+        return;
+    }
+    for (var i = 0; i < ranks.length; i++) {
+        var row = document.createElement('tr');
+        row.innerHTML = '<td>' + (i + 1) + '위</td><td>' + ranks[i].name + '</td><td>' + ranks[i].time + '초</td>';
+        tbody.appendChild(row);
+    }
+}
+
+function openRewardModal() {
+    isTimerPaused = true;
+    var opts = document.getElementById('reward-options');
+    opts.innerHTML = 
+        '<div class="reward-card" onclick="claimReward(\'atp\')">⚡ 최대 ATP +1 증가 (현재: ' + gameState.maxAtp + ')</div>' +
+        '<div class="reward-card" onclick="claimReward(\'draw\')">🃏 턴당 카드 드로우 +1장 (현재: ' + gameState.drawCount + '장)</div>' +
+        '<div class="reward-card" onclick="claimReward(\'heal\')">❤️ 세포 최대 HP +20 증가 및 완치</div>';
+    document.getElementById('reward-modal').style.display = 'flex';
+}
+
+function claimReward(type) {
+    if (type === 'atp') gameState.maxAtp += 1;
+    else if (type === 'draw') gameState.drawCount += 1;
+    else if (type === 'heal') { gameState.maxHp += 20; gameState.hp = gameState.maxHp; }
+    
+    document.getElementById('reward-modal').style.display = 'none';
+    triggerStageQuiz(currentStageIdx + 1);
+}
+
+function triggerEnemyHitFX(dmg, isSpeedBonus) {
+    var box = document.getElementById('enemy-box');
+    box.classList.remove('hit'); void box.offsetWidth; box.classList.add('hit');
+    var pop = document.createElement('div');
+    pop.className = 'dmg-popup' + (isSpeedBonus ? ' speed-bonus' : ''); 
+    pop.innerText = (isSpeedBonus ? '⚡ -' : '-') + dmg;
+    box.appendChild(pop);
+    setTimeout(function() { pop.remove(); }, 750);
+}
+
+function triggerPlayerDamageFX() {
+    var flash = document.getElementById('damage-flash');
+    flash.style.display = 'block'; flash.classList.remove('flash-anim');
+    void flash.offsetWidth; flash.classList.add('flash-anim');
+    setTimeout(function() { flash.style.display = 'none'; }, 400);
+}
+
+function healPlayer(h) {
+    gameState.hp = Math.min(gameState.maxHp, gameState.hp + h);
+    addLog('💚 체력이 <b style="color:#22c55e;">' + h + '</b> 회복되었습니다.');
+}
+
+function endTurn() {
+    if (isProcessingTurn) return;
+    isProcessingTurn = true;
+    document.getElementById('end-turn-btn').disabled = true;
+
+    var stage = STAGES[currentStageIdx];
+    addLog('🔄 턴 종료. 적의 공격!');
+
+    if (stage.skill === 'drain') {
+        nextTurnAtpPenalty = 1;
+        triggerDrainVFX();
+        gameState.enemyHp = Math.min(stage.maxHp, gameState.enemyHp + 5);
+        addLog('🧫 보스의 <b style="color:#eab308;">[에너지 강탈]</b>! ATP 1을 흡수당하고 보스가 5 HP를 회복합니다!');
+    }
+
+    var atk = stage.atk;
+    if (gameState.shield >= atk) {
+        gameState.shield -= atk;
+        addLog('🛡️ 방어막이 공격을 완벽히 막아냈습니다! (남은 방어막: ' + gameState.shield + ')');
+    } else {
+        var unblocked = atk - gameState.shield;
+        gameState.shield = 0;
+        gameState.hp -= unblocked;
+        triggerPlayerDamageFX();
+        addLog('⚔️ 방어막이 파괴되고 세포가 <b style="color:#ef4444;">' + unblocked + '</b>의 피해를 입었습니다!');
+        
+        showEducationalFeedback("세포 방어막 파괴 피드백", "<b>[방어 수용 해설]</b> 방어막을 형성하는 <b>[세포막]</b>이나 수분 삼투압을 조절하는 <b>[삼투 ➔ 액포]</b> 콤보 카드 사용을 고려해보세요.");
+    }
+
+    if (gameState.hp <= 0) {
+        clearInterval(turnTimer);
+        document.getElementById('gameover-modal').style.display = 'flex';
+        document.getElementById('end-turn-btn').disabled = false;
+        return;
+    }
+
+    setTimeout(function() {
+        gameState.atp = Math.max(1, gameState.maxAtp - nextTurnAtpPenalty);
+        nextTurnAtpPenalty = 0;
+        drawCards(gameState.drawCount - gameState.hand.length);
+        document.getElementById('end-turn-btn').disabled = false;
+        startTurnPhase();
+    }, 400);
+}
+
+// 재도전 시 최초 덱 10장 완벽 초기화 및 퀴즈 보상 누적 방지 처리
+function retryCurrentStage() {
+    document.getElementById('gameover-modal').style.display = 'none';
+    gameState.hp = gameState.maxHp;
+    gameState.atp = gameState.maxAtp;
+    gameState.shield = 0;
+    gameState.hand = [];
+    gameState.grave = [];
+    gameState.deck = [];
+    comboHistory = [];
+    isProcessingTurn = false;
+
+    // 최초 선택했던 10장 카드로 덱 재구성 및 셔플
+    for (var i = 0; i < initialDeckCards.length; i++) {
+        for (var j = 0; j < CARD_DB.length; j++) {
+            if (CARD_DB[j].id === initialDeckCards[i]) {
+                gameState.deck.push(CARD_DB[j]);
+                break;
+            }
+        }
+    }
+    shuffle(gameState.deck);
+    drawCards(gameState.drawCount);
+
+    // 해당 스테이지 퀴즈 출제 (이미 클리어된 퀴즈는 ATP 중복 획득 방지 처리됨)
+    triggerStageQuiz(currentStageIdx);
+}
+
+function addLog(msg) {
+    var l = document.getElementById('log-area');
+    l.innerHTML += msg + '<br>';
+    l.scrollTop = l.scrollHeight;
+}
+
+function renderUI() {
+    document.getElementById('player-hp').innerText = gameState.hp;
+    document.getElementById('player-max-hp').innerText = gameState.maxHp;
+    document.getElementById('player-atp').innerText = gameState.atp;
+    document.getElementById('player-max-atp').innerText = gameState.maxAtp;
+    document.getElementById('player-shield').innerText = gameState.shield;
+
+    document.getElementById('enemy-hp-text').innerText = gameState.enemyHp + ' / ' + gameState.enemyMaxHp;
+    document.getElementById('enemy-hp-fill').style.width = ((gameState.enemyHp / gameState.enemyMaxHp) * 100) + '%';
+
+    document.getElementById('deck-count').innerText = gameState.deck.length;
+    document.getElementById('grave-count').innerText = gameState.grave.length;
+
+    var handEl = document.getElementById('hand-area');
+    handEl.innerHTML = '';
+    for (var i = 0; i < gameState.hand.length; i++) {
+        (function(idx) {
+            var card = gameState.hand[idx];
+            var cardEl = document.createElement('div');
+            cardEl.className = 'game-card card-' + card.group;
+            cardEl.onclick = function() { playCard(idx); };
+            cardEl.innerHTML = 
+                '<div class="cost-badge">' + card.cost + '</div>' +
+                '<div class="card-title">' + card.name + '</div>' +
+                '<span class="card-tag">' + (card.group === 'secretion' ? '단백질분비' : card.group === 'energy' ? '에너지' : '수송/항상성') + '</span>' +
+                '<div class="card-desc">' + card.desc + '</div>';
+            handEl.appendChild(cardEl);
+        })(i);
+    }
+}
+
+function toggleModal(show) {
+    isTimerPaused = show;
+    document.getElementById('combo-modal').style.display = show ? 'flex' : 'none';
+}
+
+window.onload = function() {
+    initSetup();
+};
+</script>
+</body>
+</html>
